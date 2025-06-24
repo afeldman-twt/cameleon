@@ -13,16 +13,16 @@ use super::PacketStatus;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PacketHeader {
-    status: PacketStatus,
-    ei_flag: bool,
-    packet_type: PacketType,
-    block_id: u64,
-    packet_id: u32,
-    stream_flag: StreamFlag,
+    pub status: PacketStatus,
+    pub ei_flag: bool,
+    pub packet_type: PacketType,
+    pub block_id: u64,
+    pub packet_id: u32,
+    pub stream_flag: StreamFlag,
 }
 
 impl PacketHeader {
-    fn parse(cursor: &mut io::Cursor<&[u8]>) -> Result<Self> {
+    pub fn parse(cursor: &mut io::Cursor<&[u8]>) -> Result<Self> {
         let status = PacketStatus::parse(cursor)?;
         let bid_sflag: u16 = cursor.read_bytes_be()?;
         let ei_ptype_pid: u32 = cursor.read_bytes_be()?;
@@ -36,7 +36,11 @@ impl PacketHeader {
                 StreamFlag(bid_sflag),
             )
         } else {
-            (bid_sflag as u64, ei_ptype_pid & 0x0000_ffff, StreamFlag(0))
+            (
+                bid_sflag as u64,
+                ei_ptype_pid & 0x00_00_ff_ff,
+                StreamFlag(0),
+            )
         };
 
         Ok(Self {
@@ -131,6 +135,22 @@ impl PayloadType {
     fn parse(cursor: &mut io::Cursor<&[u8]>) -> Result<Self> {
         cursor.read_bytes_be().map(Self).map_err(Into::into)
     }
+
+    /// to be used after the generic GSVP leader packet header
+    /// was parsed, before parsing the payload-specific packet
+    ///
+    // we need it this weird way because for some reason, the
+    // potentially useful payload type specific field goes
+    // BEFORE the payload type, so we have to look into the future
+    // a bit, because we need to be able to see which payload type
+    // we need, e. g. Image or RawData or File or etc.
+    pub fn parse_generic_leader(cursor: &mut io::Cursor<&[u8]>) -> Result<Self> {
+        let position_pre = cursor.position();
+        let _payload_type_specific: u16 = cursor.read_bytes_be()?;
+        let res = Self::parse(cursor);
+        cursor.set_position(position_pre);
+        res
+    }
 }
 
 pub struct ImageLeader {
@@ -160,8 +180,12 @@ impl ImageLeader {
         self.payload_type
     }
 
-    pub fn timestamp(&self) -> u64 {
-        self.timestamp
+    pub fn timestamp(&self) -> std::time::Duration {
+        std::time::Duration::from_nanos(self.timestamp)
+    }
+
+    pub fn pixel_format(&self) -> PixelFormat {
+        self.pixel_format
     }
 
     pub fn width(&self) -> u32 {
@@ -188,7 +212,7 @@ impl ImageLeader {
         self.y_padding
     }
 
-    fn parse(cursor: &mut io::Cursor<&[u8]>) -> Result<Self> {
+    pub fn parse(cursor: &mut io::Cursor<&[u8]>) -> Result<Self> {
         let field: u8 = cursor.read_bytes_be()?;
         let field_id = field >> 4;
         let field_count = field & 0x0f;
@@ -217,6 +241,30 @@ impl ImageLeader {
             y_offset,
             x_padding,
             y_padding,
+        })
+    }
+}
+
+pub struct ImageTrailer {
+    payload_type: PayloadType,
+    size_y: u32,
+}
+
+impl ImageTrailer {
+    pub fn payload_type(&self) -> PayloadType {
+        self.payload_type
+    }
+
+    pub fn size_y(&self) -> u32 {
+        self.size_y
+    }
+
+    pub fn parse(cursor: &mut io::Cursor<&[u8]>) -> Result<Self> {
+        let payload_type = PayloadType::parse(cursor)?;
+        let size_y = cursor.read_bytes_be()?;
+        Ok(Self {
+            payload_type,
+            size_y,
         })
     }
 }

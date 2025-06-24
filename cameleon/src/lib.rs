@@ -223,9 +223,9 @@ pub enum ControlError {
     #[error("try to write invalid data to the device: {0}")]
     InvalidData(Box<dyn std::error::Error + Send + Sync>),
 
-    /// The requested operation is not supported by the device.
-    #[error("operation not supported")]
-    NotSupported,
+    /// Try to use unsupported feature.
+    #[error("try to use unsupported feature: {0}")]
+    NotSupported(Cow<'static, str>),
 }
 
 /// A specialized `Result` type for streaming.
@@ -276,6 +276,12 @@ pub enum StreamError {
 impl From<TryFromIntError> for ControlError {
     fn from(e: TryFromIntError) -> Self {
         Self::InvalidDevice(format!("internal data has invalid num type: {}", e).into())
+    }
+}
+
+impl From<std::io::Error> for StreamError {
+    fn from(err: std::io::Error) -> Self {
+        StreamError::ReceiveError(err.to_string().into()) // oder eine spezifische Variante
     }
 }
 

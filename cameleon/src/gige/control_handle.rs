@@ -6,14 +6,18 @@ use std::{
     convert::TryInto,
     io::Read,
     sync::{Arc, Mutex},
-    thread, time,
+    thread,
+    time::{self},
 };
 
 use async_std::{channel, future, net::UdpSocket, task};
 use futures_channel::oneshot;
 use futures_util::{select, FutureExt};
 
-use cameleon_device::gige::protocol::{ack, cmd};
+use cameleon_device::gige::{
+    protocol::{ack, cmd},
+    register_map::StreamChannelPort,
+};
 
 use crate::{
     genapi::CompressionType, utils::unzip_genxml, ControlError, ControlResult, DeviceControl,
@@ -21,7 +25,12 @@ use crate::{
 
 use tracing::{debug, error};
 
-use super::register_map::{Bootstrap, ControlChannelPriviledge, GvcpCapability, XmlFileLocation};
+use super::{
+    register_map::{
+        Bootstrap, ControlChannelPriviledge, GvcpCapability, StreamRegister, XmlFileLocation,
+    },
+    stream_handle::StreamParams,
+};
 
 const GVCP_DEFAULT_PORT: u16 = 3956;
 
@@ -46,8 +55,11 @@ pub struct ControlHandle {
 }
 
 impl ControlHandle {
-    pub fn new(info: DeviceInfo) -> ControlResult<Self> {
-        let inner = Arc::new(Mutex::new(task::block_on(ControlHandleInner::new(&info))?));
+    pub fn new(info: DeviceInfo, stream_params: StreamParams) -> ControlResult<Self> {
+        let inner = Arc::new(Mutex::new(task::block_on(ControlHandleInner::new(
+            &info,
+            stream_params,
+        ))?));
 
         Ok(Self {
             inner,
@@ -77,6 +89,7 @@ impl ControlHandle {
 
 impl DeviceControl for ControlHandle {
     fn open(&mut self) -> ControlResult<()> {
+        debug!("opening camera");
         let (heartbeat_timeout, need_heartbeat) = {
             let mut inner = self.inner.lock().unwrap();
             unwrap_or_log!(inner.open());
@@ -88,7 +101,7 @@ impl DeviceControl for ControlHandle {
             );
             (heartbeat_timeout, need_heartbeat)
         };
-
+        debug!("heartbeat timeout: {:#?}", heartbeat_timeout);
         let (event_tx, event_rx) = channel::unbounded();
         let (completion_tx, completion_rx) = oneshot::channel();
         let heartbeat_loop = HeartbeatLoop {
@@ -193,10 +206,11 @@ struct ControlHandleInner {
     buffer: Vec<u8>,
     capability: Option<GvcpCapability>,
     is_opened: bool,
+    stream_params: StreamParams,
 }
 
 impl ControlHandleInner {
-    async fn new(info: &DeviceInfo) -> ControlResult<Self> {
+    async fn new(info: &DeviceInfo, stream_params: StreamParams) -> ControlResult<Self> {
         let sock = UdpSocket::bind("0.0.0.0:0")
             .await
             .map_err(|err| ControlError::Io(err.into()))?;
@@ -212,6 +226,7 @@ impl ControlHandleInner {
             buffer: vec![0; GVCP_BUFFER_SIZE],
             capability: None,
             is_opened: false,
+            stream_params,
         })
     }
 
@@ -481,6 +496,7 @@ impl DeviceControl for ControlHandleInner {
                 })?;
             ent.url_string(self)?
         };
+        tracing::info!("retrieving GenICam file from: {}", url_string);
 
         let (xml, compression_type) = match XmlFileLocation::parse(&url_string)? {
             XmlFileLocation::Device {
@@ -513,7 +529,7 @@ impl DeviceControl for ControlHandleInner {
             }
 
             XmlFileLocation::Host { .. } => {
-                return Err(ControlError::InvalidDevice(
+                return Err(ControlError::NotSupported(
                     "can't retrieve `GenApi` XML from host storage".into(),
                 ))
             }
@@ -529,11 +545,29 @@ impl DeviceControl for ControlHandleInner {
     }
 
     fn enable_streaming(&mut self) -> ControlResult<()> {
-        todo!()
+        if Bootstrap::new().number_of_stream_channel(self)? != 1 {
+            return Err(ControlError::NotSupported(
+                "Number of stream channels other than 1".into(),
+            ));
+        }
+
+        let sr = StreamRegister::new(0);
+
+        let packet_size = sr.packet_size(self)?;
+        sr.set_packet_size(self, packet_size)?;
+
+        let port = StreamRegister::new(0).channel_port(self)?;
+        sr.set_channel_port(self, port.set_host_port(self.stream_params.host_port))?;
+
+        sr.set_destination_address(self, self.stream_params.host_addr)?;
+
+        Ok(())
     }
 
     fn disable_streaming(&mut self) -> ControlResult<()> {
-        todo!()
+        StreamRegister::new(0)
+            .set_channel_port(self, StreamChannelPort::from_raw(0).set_host_port(0))?;
+        Ok(())
     }
 }
 

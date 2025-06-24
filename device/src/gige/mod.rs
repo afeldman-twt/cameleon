@@ -11,65 +11,47 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub const GVCP_DEFAULT_PORT: u16 = 3956;
 
-use std::time;
+use std::{net::Ipv4Addr, time};
+use tracing::warn;
 
-use tokio::{net, time as tokiotime};
+use async_std::{future, net};
 
 use protocol::{ack, cmd, prelude::*};
 
-use std::net::Ipv4Addr;
-
-fn calc_broadcast(ip: Ipv4Addr, mask: Ipv4Addr) -> Ipv4Addr {
-    let ip = u32::from(ip);
-    let mask = u32::from(mask);
-    Ipv4Addr::from(ip | !mask)
-}
-
-pub async fn enumerate_devices(timeout: time::Duration) -> Result<Vec<ack::Discovery>> {
-    let interfaces = pnet::datalink::interfaces();
+#[tracing::instrument(level = "warn")]
+pub async fn enumerate_devices(
+    local_addr: Ipv4Addr,
+    timeout: time::Duration,
+) -> Result<Vec<ack::Discovery>> {
+    let sock = net::UdpSocket::bind((local_addr, 0)).await?;
     let packet = cmd::Discovery::new().finalize(0xffff);
     let mut buf = [0_u8; 1024];
     packet.serialize(buf.as_mut()).unwrap();
     let length = packet.length() as usize;
 
+    sock.set_broadcast(true)?;
+    sock.send_to(&buf[..length], ("255.255.255.255", GVCP_DEFAULT_PORT))
+        .await?;
+    sock.set_broadcast(false).unwrap();
+
     let mut discoveries = vec![];
 
-    println!("🔍 Sending discovery packets on all interfaces...");
-
-    for iface in interfaces {
-        for ip_net in iface.ips {
-            match (ip_net.ip(), ip_net.mask()) {
-                (std::net::IpAddr::V4(ip), std::net::IpAddr::V4(mask)) => {
-                    let broadcast = calc_broadcast(ip, mask);
-                    let local_addr = std::net::SocketAddr::new(std::net::IpAddr::V4(ip), 0);
-
-                    let sock = net::UdpSocket::bind(local_addr).await?;
-                    sock.set_broadcast(true)?;
-
-                    sock.send_to(&buf[..length], (broadcast, GVCP_DEFAULT_PORT))
-                        .await?;
-                    println!("📡 Sent discovery from {} to {}", ip, broadcast);
-
-                    if let Ok(Ok((size, _addr))) =
-                        tokiotime::timeout(timeout, sock.recv_from(&mut buf)).await
-                    {
-                        let data = &buf[..size];
-                        if let Ok(ack) = ack::AckPacket::parse(&data.to_vec()) {
-                            if ack.status().is_success() {
-                                if let Ok(discovery) = ack.ack_data_as::<ack::Discovery>() {
-                                    println!("🎯 Got Discovery from {}: {:?}", ip, discovery);
-                                    discoveries.push(discovery);
-                                }
-                            }
-                        }
-                    }
+    while future::timeout(timeout, sock.recv_from(&mut buf))
+        .await
+        .is_ok()
+    {
+        if let Ok(ack) = ack::AckPacket::parse(&buf) {
+            if ack.status().is_success() {
+                match ack.ack_data_as::<ack::Discovery>() {
+                    Ok(discovery) => discoveries.push(discovery),
+                    Err(err) => warn!("{}", err),
                 }
-                _ => continue,
+            } else {
+                warn!("invalid discovery ack status: {:?}", ack.status())
             }
         }
     }
 
-    println!("📦 Total discoveries received: {}", discoveries.len());
     Ok(discoveries)
 }
 
