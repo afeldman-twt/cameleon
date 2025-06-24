@@ -19,7 +19,7 @@ use async_std::task;
 
 use super::{CameleonResult, Camera, CameraInfo};
 
-const ENUMERATION_TIMEOUT: time::Duration = time::Duration::from_millis(500);
+const ENUMERATION_TIMEOUT: time::Duration = time::Duration::from_millis(5000);
 
 impl From<gige::Error> for ControlError {
     fn from(err: gige::Error) -> Self {
@@ -34,6 +34,10 @@ impl From<gige::Error> for ControlError {
 pub fn enumerate_cameras() -> CameleonResult<Vec<Camera<ControlHandle, StreamHandle>>> {
     let device_infos =
         task::block_on(gige::enumerate_devices(ENUMERATION_TIMEOUT)).map_err(ControlError::from)?;
+
+    for info in &device_infos {
+        println!("{:?}", info);
+    }
 
     let mut cameras: Vec<Camera<ControlHandle, StreamHandle>> =
         Vec::with_capacity(device_infos.len());

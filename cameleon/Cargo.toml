@@ -31,6 +31,7 @@ futures-util = { version = "0.3.16", features = ["async-await"] }
 cameleon-impl = { path = "../impl", version = "0.1.0" }
 anyhow = "1.0.40"
 ureq = "2.1"
+tokio = { version = "1", features = ["full"] }
 
 [dev-dependencies]
 trybuild = "1.0.42"
@@ -62,6 +63,10 @@ required-features = ["libusb"]
 name = "custom_ctxt"
 path = "examples/custom_ctxt.rs"
 required-features = ["libusb"]
+
+[[example]]
+name = "gige"
+path = "examples/gige/register_map.rs"
 
 [package.metadata.docs.rs]
 all-features = true

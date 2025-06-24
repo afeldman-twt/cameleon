@@ -1,6 +1,7 @@
 use cameleon::gige::enumerate_cameras;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let mut cameras = enumerate_cameras().unwrap();
     if cameras.is_empty() {
         println!("no camera found!");

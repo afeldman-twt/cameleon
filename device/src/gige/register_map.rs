@@ -560,14 +560,24 @@ impl XmlFileLocation {
         let invalid_url =
             || Error::InvalidData(format!("invalid url of `local` xml: {}", url).into());
 
-        let mut xml_info = url.path().split(';');
+        let path = if url.path().is_empty() {
+            url.host_str().unwrap_or("")
+        } else {
+            url.path()
+        };
+
+        let mut xml_info = path.split(';');
         let file_name = xml_info.next().ok_or_else(invalid_url)?;
+        println!("DEBUG file_name = {:?}", file_name);
+
         let address = u64::from_str_radix(xml_info.next().ok_or_else(invalid_url)?, 16)
             .map_err(|_| invalid_url())?;
         let size = u64::from_str_radix(xml_info.next().ok_or_else(invalid_url)?, 16)
             .map_err(|_| invalid_url())?;
-        let compression_type =
-            CompressionType::from_extension(file_name.split('.').next().ok_or_else(invalid_url)?)?;
+
+        let ext = file_name.rsplit('.').next().ok_or_else(invalid_url)?;
+
+        let compression_type = CompressionType::from_extension(ext)?;
 
         Ok(Self::Device {
             file_name: file_name.to_string(),
@@ -681,7 +691,7 @@ mod tests {
     #[test]
     fn test_parse_local_url() {
         let src = "local:test_xml.zip;F2154;F128";
-        let loc = XmlFileLocation::parse(src).unwrap();
+        let loc = XmlFileLocation::parse(src).expect("failed to parse local URL");
         match loc {
             XmlFileLocation::Device {
                 file_name,
