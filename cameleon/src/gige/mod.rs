@@ -19,7 +19,7 @@ use async_std::task;
 
 use super::{CameleonResult, Camera, CameraInfo};
 
-const ENUMERATION_TIMEOUT: time::Duration = time::Duration::from_millis(5000);
+const ENUMERATION_TIMEOUT: time::Duration = time::Duration::from_millis(500);
 
 impl From<gige::Error> for ControlError {
     fn from(err: gige::Error) -> Self {
