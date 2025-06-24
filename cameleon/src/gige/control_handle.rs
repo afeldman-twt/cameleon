@@ -518,7 +518,7 @@ impl DeviceControl for ControlHandleInner {
             }
 
             XmlFileLocation::Host { .. } => {
-                return Err(ControlError::NotSupported(
+                return Err(ControlError::InvalidDevice(
                     "can't retrieve `GenApi` XML from host storage".into(),
                 ))
             }
