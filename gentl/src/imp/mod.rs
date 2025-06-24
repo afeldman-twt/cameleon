@@ -40,7 +40,7 @@ impl From<ControlError> for GenTlError {
             ControlError::InvalidData(..) => InvalidValue(format!("{}", err).into()),
             ControlError::Timeout => Timeout,
             ControlError::BufferTooSmall => BufferTooSmall,
-            ControlError::NotSupported(..) => NotImplemented,
+            ControlError::NotSupported => NotImplemented,
         }
     }
 }

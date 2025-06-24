@@ -165,13 +165,13 @@ impl ReadReg {
     pub fn add_entry(&mut self, address: u32) -> Result<()> {
         const MAXIMUM_ENTRY_NUMBER: usize = 135;
         if self.addresses.len() >= MAXIMUM_ENTRY_NUMBER {
-            return Err(Error::InvalidPacket(
+            Err(Error::InvalidPacket(
                 format!(
                     "a number of entry of `ReadReg` must be smaller or equal than {}",
                     MAXIMUM_ENTRY_NUMBER
                 )
                 .into(),
-            ));
+            ))
         } else if address % 4 != 0 {
             Err(Error::InvalidPacket(
                 "an address of `ReadReg` must be a multiple of 4".into(),
