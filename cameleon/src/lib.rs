@@ -136,15 +136,19 @@
 //!
 //! [license]: https://github.com/cameleon-rs/cameleon/blob/main/LICENSE
 
-#![warn(missing_docs)]
+//#![warn(missing_docs)]
 #![allow(
     clippy::similar_names,
     clippy::missing_errors_doc,
     clippy::module_name_repetitions
 )]
 
+#[macro_use]
+pub(crate) mod utils;
+
 pub mod camera;
 pub mod genapi;
+pub mod gige;
 pub mod payload;
 #[cfg(feature = "libusb")]
 pub mod u3v;
@@ -198,8 +202,8 @@ pub enum ControlError {
     #[error("input/output error: {0}")]
     Io(anyhow::Error),
 
-    /// Timeout has occured when receiving stream payload.
-    #[error("timeout has occured when receiving stream payload")]
+    /// Timeout has occured when sending/receiveing a packet.
+    #[error("timeout has occured when sending/receiveing stream payload")]
     Timeout,
 
     /// The device is not opened.
