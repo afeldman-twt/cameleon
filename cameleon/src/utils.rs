@@ -19,6 +19,7 @@ macro_rules! unwrap_or_log {
     }};
 }
 
+#[warn(unused_macros)]
 macro_rules! impl_shared_control_handle {
     ($(
             $(#[$meta:meta])*

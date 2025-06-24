@@ -31,7 +31,11 @@ futures-util = { version = "0.3.16", features = ["async-await"] }
 cameleon-impl = { path = "../impl", version = "0.1.0" }
 anyhow = "1.0.40"
 ureq = "2.1"
+image = "0.25"
+
+pnet = "0.34.0"
 tokio = { version = "1", features = ["full"] }
+
 
 [dev-dependencies]
 trybuild = "1.0.42"
