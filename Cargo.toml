@@ -4,3 +4,7 @@ members = ["device", "cameleon", "gentl", "genapi", "impl"]
 [workspace.metadata.release]
 # Use single tag for all crates (config for `cargo release`):
 tag-name = "cameleon-v{{version}}"
+
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }

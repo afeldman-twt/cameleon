@@ -242,8 +242,9 @@ impl CopyTo for &str {
                 if *dst_size < string_len {
                     return Err(GenTlError::BufferTooSmall);
                 }
-                std::ptr::copy_nonoverlapping(self.as_ptr().cast::<i8>(), dst, self.len());
-                dst.add(self.len()).write(0); // Null terminated.
+                let dst_u8 = dst as *mut u8;
+                std::ptr::copy_nonoverlapping(self.as_ptr(), dst_u8, self.len());
+                dst_u8.add(self.len()).write(0);
             }
         }
 
