@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - eth
   pull_request:
     branches:
       - "**"
